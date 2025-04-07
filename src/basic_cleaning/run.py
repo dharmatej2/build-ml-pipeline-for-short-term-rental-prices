@@ -7,97 +7,103 @@ import argparse
 import logging
 import wandb
 import pandas as pd
+import os
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)-15s %(message)s")
 logger = logging.getLogger()
 
 def go(args):
-    # Start a new W&B run
+    """
+    Basic cleaning procedure
+    """
     run = wandb.init(job_type="basic_cleaning")
     run.config.update(args)
 
-    # Download input artifact from W&B
-    logger.info("Downloading input artifact: %s", args.input_artifact)
-    artifact = run.use_artifact(f"{args.input_artifact}:latest")
-    artifact_dir = artifact.download()
+    artifact_local_path = run.use_artifact(args.input_artifact).file()
 
-    # Load the dataset into a pandas DataFrame
-    logger.info("Loading data from %s", artifact_dir)
-    df = pd.read_csv(f"{artifact_dir}/sample.csv")
-    
-    # Data cleaning process
-    logger.info("Starting data cleaning...")
-    
-    # Drop rows with missing values (example cleaning)
-    df.dropna(inplace=True)
-    
-    # Filter rows based on price range
-    df = df[(df['price'] >= args.min_price) & (df['price'] <= args.max_price)]
-    
-    # Save cleaned data to CSV
-    df.to_csv("clean_sample.csv", index=False)
-    logger.info("Cleaned data saved to clean_sample.csv")
+    dataframe = pd.read_csv(artifact_local_path, index_col="id")
+    min_price = args.min_price
+    max_price = args.max_price
+    idx = dataframe['price'].between(min_price, max_price)
+    dataframe = dataframe[idx].copy()
+    logger.info("Dataset price outliers removal outside range: %s-%s",
+                 args.min_price, args.max_price)
+    dataframe['last_review'] = pd.to_datetime(dataframe['last_review'])
+    logger.info("Dataset last_review data type fix")
 
-    # Upload the cleaned data as a new artifact to W&B
+    idx = dataframe['longitude'].between(-74.25, -73.50) & dataframe['latitude'].between(40.5, 41.2)
+    dataframe = dataframe[idx].copy()
+
+    tmp_artifact_path = os.path.join(args.tmp_directory, args.output_artifact)
+    dataframe.to_csv(tmp_artifact_path)
+    logger.info("Temporary artifact saved to %s" , tmp_artifact_path)
+
     artifact = wandb.Artifact(
         args.output_artifact,
         type=args.output_type,
-        description=args.output_description,
+        description=args.output_description
     )
-    artifact.add_file("clean_sample.csv")
-    run.log_artifact(artifact)
-    logger.info("Uploaded cleaned artifact to W&B")
 
-    # Finish the W&B run
-    run.finish()
+    artifact.add_file(tmp_artifact_path)
+    run.log_artifact(artifact)
+
+    artifact.wait()
+    logger.info("Cleaned dataset uploaded to wandb")
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(description="A very basic data cleaning")
 
     parser.add_argument(
-        "--input_artifact", 
+        "--tmp_directory",
         type=str,
-        help="Name of the input artifact on W&B (e.g., sample.csv)",
+        help="Temporary directory for dataset storage",
         required=True
     )
 
     parser.add_argument(
-        "--output_artifact", 
+        "--input_artifact",
         type=str,
-        help="Name of the output artifact to upload to W&B",
+        help="Input artifact name",
         required=True
     )
 
     parser.add_argument(
-        "--output_type", 
+        "--output_artifact",
         type=str,
-        help="Type of the output artifact (e.g., clean_sample)",
+        help="Output artifact name",
         required=True
     )
 
     parser.add_argument(
-        "--output_description", 
+        "--output_type",
         type=str,
-        help="Description of the output artifact",
+        help="Output artifact type",
         required=True
     )
 
     parser.add_argument(
-        "--min_price", 
-        type=float,
-        help="Minimum price to filter the dataset",
+        "--output_description",
+        type=str,
+        help="Output artifact description",
         required=True
     )
 
     parser.add_argument(
-        "--max_price", 
-        type=float,
-        help="Maximum price to filter the dataset",
+        "--min_price",
+        type=int,
+        help="Minimum price limit",
         required=True
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--max_price",
+        type=int,
+        help="Maximum price limit",
+        required=True
+    )
 
-    # Run the data cleaning process
-    go(args)
+    main_args = parser.parse_args()
+
+    go(main_args)
