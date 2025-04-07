@@ -1,3 +1,6 @@
+# Submission links:
+Github: https://github.com/dharmatej2/build-ml-pipeline-for-short-term-rental-prices/tree/main
+WandB:  https://wandb.ai/dharmatej-udacity/nyc_airbnb?nw=nwuserdharmatej (pasted WandB workspace URL. there is no option to make my project public)
 # Build an ML Pipeline for Short-Term Rental Prices in NYC
 You are working for a property management company renting rooms and properties for short periods of 
 time on various rental platforms. You need to estimate the typical price for a given property based 
